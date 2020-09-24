@@ -1,0 +1,101 @@
+---
+title: "Data Wrangling In Class Notes"
+author: "Caroline Andy"
+date: "9/24/2020"
+output: html_document
+---
+# Notes
+"Convert data file to human readable form" usually means to use pivot_wider to change table format to be more consistent with what would be easily interpreted
+
+Homework 2 will take longer than homework 1 since it is a much more comprehensive and lengthly coding task
+
+Grading - TAs and Jeff try to be fair and assign grades that reflect effort. When the question asks "describe the dataset," use 2-3 sentences (not just 1!) that say something about what the dataset as a whole is intended to contain, any key variables, etc. 
+
+There are lots of different ways that we can solve a given problem using code. Usually the TAs/Jeff will be flexible in grading up to a point. It should be possible to solve everything in the homework assignment using tools we are discussed in class, given hints to, or maybe are 1 additional dplyr google search away from these tools. It's better to use these than some base R thing. 
+
+# Rename vs. mutate
+Rename is a variation on select in that it's not adding another variable, it's just changing the same. Mutate can be used to create a new variable based on entries of other variables in the dataset. If you just wanted to change the variable name, use rename or select. 
+
+# Homework 2
+Now we will do some work on homework 2 problem 1.
+
+```{r setup}
+library(tidyverse)
+library(readxl)
+```
+
+# Problem 1
+We will be using Mr. Trash Wheel dataset. Need to read and clean:
+- specificy the sheet in the Excel file and to omit non-data entries 
+- use reasonable variable names (use naming convention)
+- omit rows that do not include dumpster-specific data
+- round number of sports balls to the nearest integer and converts the results to an interger using as.integer
+
+The Mr. Trash Wheel dataset has aggregate month totals interspersed throughout the data. Header row is one big image, and there is one last column that denotes when waste to energy data is not available. There are also many tabs in the excel file. 
+
+```{r read_in}
+#Read the Mr. Trash Wheel dataset
+#Note that read_xlsx will take the first sheet in the excel file if we don't specify. The command is "sheet=" 
+#I can also use "range= cell_cols(A1:A6)" in order to specify cells to include
+trashwheel_df =
+  read_xlsx(
+    "./data_import_examples/Trash-Wheel-Collection-Totals-8-6-19.xlsx",
+    sheet = "Mr. Trash Wheel",
+    range = cell_cols("A:N")) %>%
+#piping and cleaning to make reasonable variable names
+  janitor::clean_names() %>%
+#drop_na is better than na.omit. The latter is in base R and is less tidy compliant
+  drop_na(dumpster) %>%
+#updating the sportsballs variable in my dataset; rounding and making an integer
+  mutate(
+    sports_balls = round(sports_balls),
+    sports_balls = as.integer(sports_balls) 
+  )
+#note: avoid piping inside of commands within a pipe until we are more confident
+```
+
+Now I will load in the precipitation data for 2018 and 2017 from other sheets within this excel file. I will clean the names, skip the first row, drop NA's in the month variable, create a year variable, and relocate year to the first column.  
+
+Read precipitation data
+```{r precip}
+precip_2018 =
+  read_excel(
+      "./data_import_examples/Trash-Wheel-Collection-Totals-8-6-19.xlsx", 
+      sheet = "2018 Precipitation",
+      skip = 1
+  ) %>%
+  janitor::clean_names() %>%
+  #note: there is an NA in the month column beside a total entry in the precipitation column. We can remove this total by dropping NAs in the month column. 
+  drop_na(month) %>%
+  mutate(year = 2018) %>%
+  relocate(year)
+
+precip_2017 =
+  read_excel(
+      "./data_import_examples/Trash-Wheel-Collection-Totals-8-6-19.xlsx", 
+      sheet = "2017 Precipitation",
+      skip = 1
+  ) %>%
+  janitor::clean_names() %>%
+  drop_na(month) %>%
+  mutate(year = 2017) %>%
+  relocate(year)
+```
+
+Now combine annual precipitation
+```{r bind_rows}
+precip_df =
+  bind_rows(precip_2018, precip_2017) %>%
+  mutate(month = month.name[month])
+# as an alternative to mutate(month = month.name[month]), we could create a tibble containing month names and month numbers. Then do left_join with precip_df as left dataset. Join with tibble by month number.
+```
+
+Note: we should avoid dollar signs and square brackets as much as possible in our code. If we are coding this way, we should note that we are probably coding in a way we shouldn't be/are not meant to be.
+
+Summary paragraph:
+This dataset contains information from the Mr. Trash Wheel trash collector in Baltimore Maryland. As trash enters the inner harbor, the trashwheel collects that trash and stores it in a dumpster. The dataset contains information on year, month and trash collected, including some specific kinds of trash. There are a total of `r nrow(trashwheel_df)` rows in our final dataset. Additional data sheets include monthly precipitation data. 
+```{r note}
+#in the above paragraph, still need to report on median and total for two variables. We just didn't finish this in class. 
+```
+
+

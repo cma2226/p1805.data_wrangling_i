@@ -1,0 +1,162 @@
+---
+title: "Tidying Practice"
+author: "Caroline Andy"
+date: "9/23/2020"
+output: html_document
+---
+
+```{r setup}
+library(tidyverse)
+#limiting the number of lines printed in a  tibble
+options(tibble.print_min = 5)
+```
+
+Loading sas data
+```{r sas}
+pulse_data = 
+  haven::read_sas("./data_import_examples/public_pulse_data.sas7bdat") %>%
+  janitor::clean_names()
+pulse_data
+```
+
+Looking at the data, we immediately notice a problem: the BDI score is spread across four columns, which correspond to four observation times. We can fix this problem using pivot_longer:
+
+```{r pivot_longer}
+pulse_tidy_data = 
+  pivot_longer(
+    pulse_data, 
+    bdi_score_bl:bdi_score_12m,
+    names_to = "visit", 
+    values_to = "bdi")
+pulse_tidy_data
+```
+
+This looks much better! However, now visit is an issue. The original column names were informative but we probably don’t need to keep the bdi_score_ prefix in each case. I’ll use an additional option in pivot_longer to address this:
+
+```{r removing_prefix}
+pulse_tidy_data = 
+  pivot_longer(
+    pulse_data, 
+    bdi_score_bl:bdi_score_12m,
+    names_to = "visit", 
+    names_prefix = "bdi_score_",
+    values_to = "bdi")
+
+pulse_tidy_data
+```
+
+Here we will reformat changes into one piped command as opposed to multiple intermediate steps.  
+```{r tidying_format}
+pulse_data = 
+  haven::read_sas("./data_import_examples/public_pulse_data.sas7bdat") %>%
+  janitor::clean_names() %>%
+  pivot_longer(
+    bdi_score_bl:bdi_score_12m,
+    names_to = "visit", 
+    names_prefix = "bdi_score_",
+    values_to = "bdi") %>%
+  relocate(visit) %>%
+  mutate(
+    visit = replace(visit, visit == "bl", "00m"),
+    visit = factor(visit, levels = str_c(c("00", "01", "06", "12"), "m"))) %>%
+  arrange(id, visit)
+pulse_data
+```
+
+Practice:
+In the litters data, the variables gd0_weight and gd18_weight give the weight of the mother mouse on gestational days 0 and 18. Write a data cleaning chain that retains only litter_number and these columns; produces new variables gd and weight; and makes gd a numeric variable taking values 0 and 18 (for the last part, you might want to use recode …). Is this version “tidy”?
+
+```{r practice}
+litters_clean =
+  read_csv("./data_import_examples/FAS_litters.csv") %>%
+  janitor::clean_names() %>%
+  select(litter_number, gd0_weight, gd18_weight) %>%
+  pivot_longer(
+    gd0_weight:gd18_weight,
+    names_to = "gd",
+    values_to = "weight") %>%
+  mutate(gd = recode(gd, "gd0_weight" = 0, "gd18_weight" = 18))
+```
+
+The code below creates a tidy dataset that could result from an analysis. This is the correct format for additional analysis or visualization, but doesn’t facilitate quick comparisons for human readers.
+
+```{r create_tibble}
+analysis_result = tibble(
+  group = c("treatment", "treatment", "placebo", "placebo"),
+  time = c("pre", "post", "pre", "post"),
+  mean = c(4, 8, 3.5, 4)
+)
+
+analysis_result
+```
+
+I can change the table to be formatted in a more visually appealing way. The below code using pivot_wider accomplishes this. 
+
+```{r pivot_wider}
+pivot_wider(
+  analysis_result, 
+  names_from = "time", 
+  values_from = "mean")
+```
+
+Binding rows
+We’ve looked at single-table non-tidy data, but non-tidiness often stems from relevant data spread across multiple tables. In the simplest case, these tables are basically the same and can be stacked to produce a tidy dataset. That’s the setting in LotR_words.xlsx, where the word counts for different races and genders in each movie in the trilogy are spread across distinct data rectangles.
+
+```{r reading_each_table}
+#creating a new column in each data frame to denote movie choice, which was originally the variable by which entries were separated across tables. 
+fellowship_ring = 
+  readxl::read_excel("./data_import_examples/LotR_Words.xlsx", range = "B3:D6") %>%
+  mutate(movie = "fellowship_ring")
+
+two_towers = 
+  readxl::read_excel("./data_import_examples/LotR_Words.xlsx", range = "F3:H6") %>%
+  mutate(movie = "two_towers")
+
+return_king = 
+  readxl::read_excel("./data_import_examples/LotR_Words.xlsx", range = "J3:L6") %>%
+  mutate(movie = "return_king")
+```
+
+Once each table is ready to go, we can stack them using bind_rows and tidy the result:
+```{r bind_rows}
+lotr_tidy = 
+  bind_rows(fellowship_ring, two_towers, return_king) %>%
+  janitor::clean_names() %>%
+  pivot_longer(
+    female:male,
+    names_to = "gender",
+    values_to = "words") %>%
+  mutate(race = str_to_lower(race)) %>%
+  select(movie, everything())
+lotr_tidy
+```
+  
+Joining datasets
+There are four main ways to join dataframes x and y:
+- Inner: keeps data that appear in both x and y
+- Left: keeps data that appear in x
+- Right: keeps data that appear in y
+- Full: keeps data that appear in either x or y
+
+We will merge FAS_pups.csv and FAS_litters.csv which share a common variable: Litter Number. 
+```{r join}
+#load in FAS_pups, assign column types, clean, and recode sex variable entries to be "male" and "female" instead of ambiguous numbers 
+pup_data = 
+  read_csv("./data_import_examples/FAS_pups.csv", col_types = "ciiiii") %>%
+  janitor::clean_names() %>%
+  mutate(sex = recode(sex, `1` = "male", `2` = "female")) 
+#load in FAS_litters data, assign column types, clean, separate group variable into two variables (day of treatment and treatment dose), move litter number to be first in data frame, calculate a new variable (wt_gain) and modify dose variable
+litter_data = 
+  read_csv("./data_import_examples/FAS_litters.csv", col_types = "ccddiiii") %>%
+  janitor::clean_names() %>%
+  separate(group, into = c("dose", "day_of_tx"), sep = 3) %>%
+  relocate(litter_number) %>%
+  mutate(
+    wt_gain = gd18_weight - gd0_weight,
+    dose = str_to_lower(dose))
+#join datasets using left join
+fas_data = 
+  left_join(pup_data, litter_data, by = "litter_number")
+
+fas_data
+```
