@@ -1,0 +1,83 @@
+---
+title: "Data Manipulation Practice with dplyr"
+author: "Caroline Andy"
+date: "9/23/2020"
+output: html_document
+---
+
+```{r setup}
+library(tidyverse)
+options(tibble.print_min = 3)
+
+litters_data = read_csv("./data_import_examples/FAS_litters.csv",
+  col_types = "ccddiiii")
+litters_data = janitor::clean_names(litters_data)
+
+pups_data = read_csv("./data_import_examples/FAS_pups.csv",
+  col_types = "ciiiii")
+pups_data = janitor::clean_names(pups_data)
+
+```
+
+Selecting a subset of your dataframe
+```{r subset}
+subset1 <- select(litters_data, group, litter_number, gd0_weight, pups_born_alive)
+subset2 <- select(litters_data, group:gd_of_birth)
+```
+
+You can also specify columns to remove.
+```{r remove}
+subset3 <- select(litters_data, -pups_survive)
+```
+
+Select is also really helpful to rename variables.
+```{r select_to_rename}
+subset4 <- select(litters_data, GROUP = group, LiTtEr_NuMbEr = litter_number)
+```
+
+If you only want to rename variables and don't want to specific select or select out any variables, you can just use the rename function.
+```{r rename}
+subset5 <- rename(litters_data, GROUP = group, LiTtEr_NuMbEr = litter_number)
+```
+
+There are some handy helper functions for select; read about all of them using ?select_helpers. I use starts_with(), ends_with(), and contains() often, especially when there variables are named with suffixes or other standard patterns:
+```{r helpers}
+subset6 <- select(litters_data, starts_with("gd"))
+```
+
+If you want to reorder your columns, you can use everything() to list everything else not explicitly mentioned but present in the dataframe. This will reorder but not drop any columns.
+```{r reorder}
+subset7 <- select(litters_data, litter_number, pups_survive, everything())
+```
+
+Select will always export a dataframe, even if you are only exporting one column. Sometimes this is okay, but sometimes we want to be dealing with a vector. In these cases, we will need to use the pull function. 
+
+```{r filter}
+filter(litters_data, pups_born_alive == 3)
+filter(litters_data, pups_born_alive >= 2)
+#this filters out any pups that survived 4 (time units)
+filter(litters_data, pups_survive != 4)
+filter(litters_data, group %in% c("Con7", "Con8"))
+filter(litters_data, group == "Con7" & gd_of_birth == 20)
+```
+
+Though you can use filter to drop NAs, it is preferable to use drop_na from the tidyr package.
+```{r drop_na}
+drop_na(litters_data) 
+#drop NAs from a specific column
+drop_na(litters_data, pups_born_alive)
+```
+
+Sometimes you need to select columns; sometimes you need to change them or create new ones. You can do this using mutate
+
+```{r mutate}
+mutate(litters_data,
+       wt_gain = gd18_weight - gd0_weight,
+       group = str_to_lower(group))
+```
+
+In comparison to the preceding, arranging is actually pretty straightforward. You can arrange the rows in your data according to the values in one or more columns:
+
+```{r arrange}
+head(arrange(litters_data, group, pups_born_alive), 10)
+```
